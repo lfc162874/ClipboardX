@@ -65,7 +65,7 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 | 功能 | 说明 | 优先级 | 状态 |
 |---|---|---|---|
 | 全局快捷键 | Option + V 唤起搜索面板 | P1 | 已完成 |
-| 自动粘贴 | 复制后模拟 Cmd + V，需要 Accessibility 权限 | P2 | 未开始 |
+| 自动粘贴 | 复制后模拟 Cmd + V，需要 Accessibility 权限 | P2 | 已完成 |
 | 图片支持 | 记录图片并保存到应用目录 | P2 | 已完成 |
 | URL 分类 | 自动识别 URL 类型 | P2 | 已完成 |
 | 文件路径支持 | 记录复制的文件路径 | P2 | 已完成 |
@@ -73,8 +73,12 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 | 单条删除 | 删除某条历史记录并同步清理资源 | P2 | 已完成 |
 | 类型过滤 | 按文本、链接、文件、图片过滤历史记录 | P2 | 已完成 |
 | 来源应用展示 | 展示记录来源应用名称 | P2 | 已完成 |
-| JSON 本地持久化 | 使用应用支持目录保存历史数据和图片资源 | P1 | 已完成 |
-| SQLite / SwiftData | 替换 JSON 为结构化持久化与更强查询能力 | P1 | 未开始 |
+| 设置窗口 | 管理通用行为和隐私偏好 | P2 | 已完成 |
+| 自定义敏感过滤 | 用户可添加额外敏感内容匹配规则 | P2 | 已完成 |
+| 来源应用黑名单 | 忽略指定应用复制出来的内容 | P2 | 已完成 |
+| SQLite 本地持久化 | 使用 SQLite 保存历史索引和元数据 | P1 | 已完成 |
+| 旧 JSON 自动迁移 | 首次启动时将旧 JSON 历史迁移到 SQLite | P1 | 已完成 |
+| SwiftData | 后续如需系统级数据能力，可评估替换或桥接 | P2 | 未开始 |
 | CloudKit 同步 | 多台 Mac 间同步历史 | P3 | 未开始 |
 | 局域网同步 | Bonjour + WebSocket 设备发现与同步 | P3 | 未开始 |
 
@@ -115,7 +119,8 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 搜索策略：
 
 - MVP 采用内存过滤。
-- 后续存储层改为 SQLite FTS5 或 SwiftData 查询。
+- 当前存储层已迁移到 SQLite，搜索仍采用内存过滤。
+- 后续可改为 SQLite FTS5 查询。
 - 搜索字段包括 content、preview、type、类型显示名、sourceApp。
 - 当前支持按类型过滤：全部、文本、链接、文件、图片。
 
@@ -136,6 +141,13 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 | file | 写回文件 URL 对象 |
 | image | 写回 PNG 图片数据 |
 
+如果用户开启自动粘贴：
+
+1. 写回剪贴板成功后隐藏历史窗口。
+2. 激活打开历史窗口前的前台应用。
+3. 在 Accessibility 权限已授权时模拟 `Cmd + V`。
+4. 未授权时弹出系统辅助功能权限提示，不执行自动粘贴。
+
 ### 7.5 隐私过滤
 
 默认过滤以下内容：
@@ -149,13 +161,27 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 - `验证码`
 - `verification code`
 
-后续支持用户自定义过滤规则。
+当前已支持：
+
+- 默认敏感规则。
+- 用户自定义敏感规则，保存在 `UserDefaults`。
+- 忽略来源应用列表，命中 `sourceApp` 时不保存该条记录。
+- 设置窗口中新增、删除、重置自定义规则。
 
 ### 7.6 图片资源管理
 
 - 图片剪贴板内容会转成 PNG 后保存到 `~/Library/Application Support/ClipboardX/Images/`。
-- 历史 JSON 只保存图片路径和图片数据哈希，不直接保存大块图片二进制。
+- SQLite 只保存图片路径和图片数据哈希，不直接保存大块图片二进制。
 - 删除图片记录、清空历史、历史数量超限裁剪时，会同步清理无引用图片资源。
+
+### 7.7 SQLite 持久化
+
+- 历史数据保存到 `~/Library/Application Support/ClipboardX/clipboard-history.sqlite`。
+- `clipboard_items` 表保存历史记录、内容类型、预览、哈希、来源应用、置顶状态和时间戳。
+- `metadata` 表保存迁移标记等内部状态。
+- 启动时加载 SQLite 数据到内存，列表展示和当前搜索仍优先使用内存缓存。
+- 发现旧的 `clipboard-history.json` 且尚未迁移时，会自动解码并导入 SQLite。
+- SQLite 启用 WAL journal，降低频繁写入对主数据库文件的影响。
 
 ## 8. 非功能需求
 
@@ -164,7 +190,7 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 - 剪贴板监听不应明显影响系统性能。
 - 历史记录列表打开响应时间应低于 300ms。
 - 第一版建议最多保留 1000 条历史。
-- 图片文件不直接写入 JSON，避免历史文件膨胀。
+- 图片文件不直接写入 SQLite，避免数据库膨胀。
 
 ### 8.2 隐私
 
@@ -173,7 +199,8 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 - 提供清空历史能力。
 - 提供暂停监听能力。
 - 图片资源保存在本机应用支持目录，不上传云端。
-- 后续提供应用黑名单。
+- 提供来源应用黑名单。
+- 提供自定义敏感过滤规则。
 
 ### 8.3 可靠性
 
@@ -189,7 +216,8 @@ ClipboardX
 ├── App
 │   ├── ClipboardXApp.swift
 │   ├── AppState.swift
-│   └── HotKeyController.swift
+│   ├── HotKeyController.swift
+│   └── PasteController.swift
 ├── Clipboard
 │   ├── ClipboardContent.swift
 │   ├── ClipboardContentClassifier.swift
@@ -203,7 +231,8 @@ ClipboardX
 │   ├── ClipboardStore.swift
 │   └── HashService.swift
 └── UI
-    └── HistoryView.swift
+    ├── HistoryView.swift
+    └── SettingsView.swift
 ```
 
 ## 10. 开发里程碑
@@ -213,7 +242,7 @@ ClipboardX
 - [x] 初始化 Swift Package。
 - [x] App 启动后显示菜单栏图标。
 - [x] 后台监听剪贴板文本。
-- [x] JSON 本地保存历史。
+- [x] SQLite 本地保存历史。
 - [x] 菜单中展示打开历史窗口、暂停监听、清空历史、退出。
 
 ### Milestone 2：基础可用
@@ -225,11 +254,11 @@ ClipboardX
 
 ### Milestone 3：本地持久化
 
-- [x] 使用 JSON 持久化历史数据。
+- [x] 使用 SQLite 持久化历史数据。
+- [x] 支持旧 JSON 历史自动迁移。
 - [x] 图片资源保存到应用支持目录。
 - [x] 支持最多保存 1000 条。
 - [x] 支持自动清理超限记录和无引用图片资源。
-- [ ] 引入 SQLite / SwiftData。
 
 ### Milestone 4：增强体验
 
@@ -240,7 +269,10 @@ ClipboardX
 - [x] 类型过滤。
 - [x] 图片缩略图。
 - [x] 来源应用展示。
-- [ ] 自动粘贴。
+- [x] 自动粘贴。
+- [x] 设置窗口。
+- [x] 自定义敏感过滤规则。
+- [x] 来源应用黑名单。
 
 ### Milestone 5：共享同步
 
@@ -250,11 +282,10 @@ ClipboardX
 
 ## 11. 当前开发进度
 
-截至 2026-07-03，ClipboardX 已完成菜单栏常驻、剪贴板监听、文本/链接/文件/图片记录、搜索、类型过滤、点击复制、去重、敏感内容过滤、暂停监听、清空历史、收藏置顶、单条删除、来源应用展示、Option + V 全局快捷键、JSON 本地持久化和图片资源管理。
+截至 2026-07-03，ClipboardX 已完成菜单栏常驻、剪贴板监听、文本/链接/文件/图片记录、搜索、类型过滤、点击复制、自动粘贴、去重、敏感内容过滤、自定义敏感规则、来源应用黑名单、暂停监听、清空历史、收藏置顶、单条删除、来源应用展示、设置窗口、Option + V 全局快捷键、SQLite 本地持久化、旧 JSON 自动迁移和图片资源管理。
 
 仍未完成的主要功能：
 
-- SQLite / SwiftData 持久化替换。
-- 自动粘贴与 Accessibility 权限流程。
+- SQLite FTS5 搜索增强。
 - CloudKit 多设备同步。
 - 局域网同步与设备管理。

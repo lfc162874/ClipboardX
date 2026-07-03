@@ -56,6 +56,23 @@ struct HistoryView: View {
             TextField("搜索剪贴板历史...", text: $keyword)
                 .textFieldStyle(.roundedBorder)
 
+            HStack(spacing: 12) {
+                Toggle("自动粘贴", isOn: autoPasteBinding)
+                    .toggleStyle(.switch)
+                    .help("点击历史记录后自动执行 Cmd+V")
+
+                if appState.isAutoPasteEnabled && !appState.isAccessibilityTrusted {
+                    Button {
+                        appState.requestAccessibilityPermission()
+                    } label: {
+                        Label("授权辅助功能", systemImage: "exclamationmark.triangle")
+                    }
+                    .help("自动粘贴需要 macOS 辅助功能权限")
+                }
+
+                Spacer()
+            }
+
             Picker("类型", selection: $selectedType) {
                 Text("全部").tag(nil as ClipboardItemType?)
                 ForEach(Self.filterTypes) { type in
@@ -69,15 +86,25 @@ struct HistoryView: View {
         .padding(16)
     }
 
+    private var autoPasteBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isAutoPasteEnabled },
+            set: { appState.setAutoPasteEnabled($0) }
+        )
+    }
+
     private var statusText: String {
         let countText = "\(appState.items.count) 条记录"
         let monitoringText = appState.isMonitoring ? "正在监听剪贴板" : "监听已暂停"
+        let autoPasteText = appState.isAutoPasteEnabled
+            ? (appState.isAccessibilityTrusted ? "，自动粘贴已开启" : "，自动粘贴待授权")
+            : ""
         let searchText = keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ""
             : "，匹配 \(visibleItems.count) 条"
         let typeText = selectedType.map { "，\($0.displayName)" } ?? ""
 
-        return "\(monitoringText)，\(countText)\(typeText)\(searchText)"
+        return "\(monitoringText)，\(countText)\(autoPasteText)\(typeText)\(searchText)"
     }
 
     private var list: some View {

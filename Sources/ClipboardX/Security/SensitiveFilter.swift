@@ -1,7 +1,7 @@
 import Foundation
 
 struct SensitiveFilter {
-    private let blockedPatterns = [
+    static let defaultBlockedPatterns = [
         "password=",
         "Authorization:",
         "Bearer ",
@@ -12,12 +12,20 @@ struct SensitiveFilter {
         "verification code"
     ]
 
+    private let blockedPatterns: [String]
+
+    init(extraPatterns: [String] = []) {
+        self.blockedPatterns = Self.defaultBlockedPatterns + extraPatterns
+    }
+
     func shouldIgnore(_ text: String) -> Bool {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return true }
 
         return blockedPatterns.contains { pattern in
-            normalized.localizedCaseInsensitiveContains(pattern)
+            let trimmedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedPattern.isEmpty else { return false }
+            return normalized.localizedCaseInsensitiveContains(trimmedPattern)
         }
     }
 }

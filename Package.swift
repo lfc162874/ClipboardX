@@ -13,7 +13,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ClipboardX",
-            path: "Sources/ClipboardX"
+            path: "Sources/ClipboardX",
+            linkerSettings: [
+                .linkedLibrary("sqlite3")
+            ]
         )
     ]
 )
