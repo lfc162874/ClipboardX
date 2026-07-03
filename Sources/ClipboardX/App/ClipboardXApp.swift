@@ -27,8 +27,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var lanSharingWindow: NSWindow?
     private var targetApplication: NSRunningApplication?
     private var cancellables = Set<AnyCancellable>()
+    private var reportedHotKeyFailures = Set<String>()
     private let screenshotPinController = ScreenshotPinController()
-    private lazy var historyHotKeyController = HotKeyController { [weak self] in
+    private lazy var historyHotKeyController = HotKeyController(
+        description: "Option+V",
+        onRegistrationFailure: { [weak self] message in
+            Task { @MainActor in
+                self?.showHotKeyRegistrationFailure(message)
+            }
+        }
+    ) { [weak self] in
         Task { @MainActor in
             self?.openHistory()
         }
@@ -37,7 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         keyCode: UInt32(kVK_ANSI_A),
         modifiers: UInt32(optionKey | shiftKey),
         id: 2,
-        description: "Option+Shift+A"
+        description: "Option+Shift+A",
+        onRegistrationFailure: { [weak self] message in
+            Task { @MainActor in
+                self?.showHotKeyRegistrationFailure(message)
+            }
+        }
     ) { [weak self] in
         Task { @MainActor in
             self?.captureScreenshotAndPin()
@@ -63,7 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem?.button?.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipboardX")
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "打开历史记录", action: #selector(openHistory), keyEquivalent: "v"))
+        let historyItem = NSMenuItem(title: "打开历史记录", action: #selector(openHistory), keyEquivalent: "v")
+        historyItem.keyEquivalentModifierMask = [.option]
+        menu.addItem(historyItem)
 
         let screenshotItem = NSMenuItem(title: "截图并固定", action: #selector(captureScreenshotAndPin), keyEquivalent: "a")
         screenshotItem.keyEquivalentModifierMask = [.option, .shift]
@@ -149,7 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if historyWindow == nil {
             let view = HistoryView(appState: appState)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
+                contentRect: NSRect(x: 0, y: 0, width: 860, height: 620),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
@@ -172,8 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if settingsWindow == nil {
             let view = SettingsView(appState: appState)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 460),
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 740, height: 560),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
@@ -193,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if lanSharingWindow == nil {
             let view = LANSharingView(appState: appState)
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
+                contentRect: NSRect(x: 0, y: 0, width: 840, height: 600),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
@@ -254,6 +269,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         autoPasteMenuItem?.title = appState.isAutoPasteEnabled ? "关闭自动粘贴" : "开启自动粘贴"
         autoPasteMenuItem?.state = appState.isAutoPasteEnabled ? .on : .off
         autoPasteMenuItem?.toolTip = appState.isAccessibilityTrusted ? nil : "自动粘贴需要辅助功能权限"
+    }
+
+    private func showHotKeyRegistrationFailure(_ message: String) {
+        guard !reportedHotKeyFailures.contains(message) else { return }
+        reportedHotKeyFailures.insert(message)
+
+        let alert = NSAlert()
+        alert.messageText = "快捷键注册失败"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     private func rememberTargetApplication() {

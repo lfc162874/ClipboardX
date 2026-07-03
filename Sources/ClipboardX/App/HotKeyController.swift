@@ -7,6 +7,7 @@ final class HotKeyController {
     private let keyCode: UInt32
     private let modifiers: UInt32
     private let description: String
+    private let onRegistrationFailure: ((String) -> Void)?
     private let onTrigger: () -> Void
 
     private var hotKeyRef: EventHotKeyRef?
@@ -17,12 +18,14 @@ final class HotKeyController {
         modifiers: UInt32 = UInt32(optionKey),
         id: UInt32 = 1,
         description: String = "Option+V",
+        onRegistrationFailure: ((String) -> Void)? = nil,
         onTrigger: @escaping () -> Void
     ) {
         self.keyCode = keyCode
         self.modifiers = modifiers
         self.hotKeyIDValue = id
         self.description = description
+        self.onRegistrationFailure = onRegistrationFailure
         self.onTrigger = onTrigger
     }
 
@@ -77,6 +80,7 @@ final class HotKeyController {
 
         guard handlerStatus == noErr else {
             print("ClipboardX failed to install hotkey handler: \(handlerStatus)")
+            onRegistrationFailure?(failureMessage(status: handlerStatus, phase: "安装快捷键监听"))
             return
         }
 
@@ -92,6 +96,7 @@ final class HotKeyController {
 
         if hotKeyStatus != noErr {
             print("ClipboardX failed to register \(description) hotkey: \(hotKeyStatus)")
+            onRegistrationFailure?(failureMessage(status: hotKeyStatus, phase: "注册快捷键"))
             unregister()
         }
     }
@@ -106,5 +111,13 @@ final class HotKeyController {
             RemoveEventHandler(eventHandlerRef)
             self.eventHandlerRef = nil
         }
+    }
+
+    private func failureMessage(status: OSStatus, phase: String) -> String {
+        if status == -9878 {
+            return "\(description) 已被其他应用或另一个 ClipboardX 实例占用，无法注册。请退出旧的 ClipboardX 进程，或换一个快捷键。"
+        }
+
+        return "\(description) \(phase)失败，状态码：\(status)。"
     }
 }

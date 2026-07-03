@@ -99,25 +99,25 @@ private struct ScreenshotPinView: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Color(nsColor: .windowBackgroundColor)
+            Color(nsColor: .controlBackgroundColor)
 
             Image(nsImage: image)
                 .resizable()
                 .scaledToFit()
-                .padding(8)
+                .padding(10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if isHovering {
                 toolbar
-                    .padding(10)
-                    .transition(.opacity)
+                    .padding(12)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(.quaternary, lineWidth: 1)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.16)) {
                 isHovering = hovering
@@ -129,7 +129,7 @@ private struct ScreenshotPinView: View {
         HStack(spacing: 6) {
             Button(action: copyAction) {
                 Image(systemName: "doc.on.doc")
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
             }
             .help("复制截图到剪贴板")
 
@@ -138,20 +138,23 @@ private struct ScreenshotPinView: View {
                 levelAction(isPinned)
             } label: {
                 Image(systemName: isPinned ? "pin.fill" : "pin")
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
             }
             .help(isPinned ? "取消置顶" : "置顶")
 
             Button(role: .destructive, action: closeAction) {
                 Image(systemName: "xmark")
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
             }
             .help("关闭贴片")
         }
         .buttonStyle(.borderless)
-        .padding(6)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 3)
+        .padding(5)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(.quaternary, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 4)
     }
 }
