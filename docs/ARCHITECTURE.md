@@ -25,7 +25,9 @@ ClipboardX
 │   └── ClipboardX
 │       ├── App
 │       ├── Clipboard
+│       ├── Screenshot
 │       ├── Security
+│       ├── Sharing
 │       ├── Storage
 │       └── UI
 └── docs
@@ -130,6 +132,7 @@ Files:
 
 - `Sources/ClipboardX/UI/HistoryView.swift`
 - `Sources/ClipboardX/UI/SettingsView.swift`
+- `Sources/ClipboardX/UI/LANSharingView.swift`
 
 Responsibilities:
 
@@ -138,6 +141,39 @@ Responsibilities:
 - Show source app, preview text, and image thumbnails.
 - Expose copy, delete, pin, clear, pause, and settings workflows.
 - Manage custom sensitive rules and ignored source apps.
+- Provide a dedicated LAN sharing window for device discovery, trust, and receive policy.
+
+### 4.6 Screenshot
+
+Files:
+
+- `Sources/ClipboardX/Screenshot/ScreenshotService.swift`
+- `Sources/ClipboardX/Screenshot/ScreenshotPinController.swift`
+
+Responsibilities:
+
+- Trigger macOS region screenshot through the system screenshot tool.
+- Read the screenshot from `NSPasteboard.general` as PNG data.
+- Store screenshots as image history items.
+- Create temporary floating screenshot pin windows for side-by-side comparison.
+- Support multiple pins, resizing, closing, copying, and floating-level toggling.
+
+### 4.7 Sharing
+
+Files:
+
+- `Sources/ClipboardX/Sharing/SharedDevice.swift`
+- `Sources/ClipboardX/Sharing/ClipboardTransferPayload.swift`
+- `Sources/ClipboardX/Sharing/LANSharingService.swift`
+
+Responsibilities:
+
+- Advertise ClipboardX on the local network through Bonjour.
+- Discover other local ClipboardX devices.
+- Manage lightweight device trust and pairing requests.
+- Send text, URL, and image clipboard payloads to trusted devices.
+- Reject clipboard payloads from untrusted devices.
+- Queue received payloads for user confirmation before converting them into local history records.
 
 ## 5. Main Flows
 
@@ -196,6 +232,40 @@ Settings are saved to UserDefaults
 Future clipboard captures are filtered before persistence
 ```
 
+### 5.4 Capture Screenshot Pin
+
+```text
+User chooses Screenshot and Pin or presses Option + Shift + A
+    ↓
+ScreenshotService launches macOS region capture
+    ↓
+macOS writes screenshot image to NSPasteboard.general
+    ↓
+ClipboardStore saves the image as a history item
+    ↓
+ScreenshotPinController opens a floating image pin
+```
+
+### 5.5 Send Over LAN
+
+```text
+User opens LAN Sharing from the menu bar and enables sharing
+    ↓
+LANSharingService advertises and discovers Bonjour services
+    ↓
+User trusts a discovered device
+    ↓
+User sends a text, URL, or image history item
+    ↓
+Receiver validates the source device is trusted
+    ↓
+Receiver adds the payload to pending receive requests
+    ↓
+User accepts the incoming content
+    ↓
+ClipboardStore saves the payload to local history
+```
+
 ## 6. Storage Strategy
 
 SQLite is the primary local store:
@@ -215,6 +285,9 @@ ClipboardX uses local-first defaults:
 - Network sync is not enabled by default.
 - Default sensitive rules block common tokens, passwords, private keys, and verification codes.
 - Users can pause monitoring, clear history, add custom sensitive rules, and ignore selected source apps.
+- LAN sharing is off by default and only sends manually selected history items.
+- LAN send uses the existing sensitive-content filter for text and URL items.
+- LAN receive rejects payloads from untrusted devices.
 - Future CloudKit or LAN sync should remain explicit opt-in.
 
 ## 8. Extension Points

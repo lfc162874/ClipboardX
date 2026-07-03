@@ -7,6 +7,11 @@ final class AppState: ObservableObject {
         static let autoPasteEnabled = "autoPasteEnabled"
         static let customSensitivePatterns = "customSensitivePatterns"
         static let ignoredSourceApps = "ignoredSourceApps"
+        static let localDeviceID = "localDeviceID"
+        static let localDeviceName = "localDeviceName"
+        static let lanSharingEnabled = "lanSharingEnabled"
+        static let lanTrustedDeviceIDs = "lanTrustedDeviceIDs"
+        static let lanAutoCopyReceivedContent = "lanAutoCopyReceivedContent"
     }
 
     @Published private(set) var isMonitoring = false
@@ -15,25 +20,60 @@ final class AppState: ObservableObject {
     @Published private(set) var isAccessibilityTrusted: Bool
     @Published private(set) var customSensitivePatterns: [String]
     @Published private(set) var ignoredSourceApps: [String]
+    @Published private(set) var isCapturingScreenshot = false
+    @Published private(set) var screenshotErrorMessage: String?
+    @Published private(set) var isLANSharingEnabled: Bool
+    @Published private(set) var localDeviceName: String
+    @Published private(set) var discoveredDevices: [SharedDevice] = []
+    @Published private(set) var pairingRequests: [PairingRequest] = []
+    @Published private(set) var incomingClipboardRequests: [IncomingClipboardRequest] = []
+    @Published private(set) var trustedDeviceIDs: [String]
+    @Published private(set) var shouldAutoCopyReceivedLANContent: Bool
+    @Published private(set) var lanSharingMessage: String?
 
     private let store = ClipboardStore()
     private let monitor = ClipboardMonitor()
     private let pasteController = PasteController()
+    private let lanSharingService: LANSharingService
+    private let localDeviceID: String
     private let userDefaults: UserDefaults
 
     var prepareForAutoPaste: (() -> Void)?
+    var showScreenshotPin: ((ClipboardItem) -> Void)?
+    var showLANReceivePrompt: (() -> Void)?
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        let storedDeviceID = userDefaults.string(forKey: DefaultsKey.localDeviceID) ?? UUID().uuidString
+        userDefaults.set(storedDeviceID, forKey: DefaultsKey.localDeviceID)
+        self.localDeviceID = storedDeviceID
+
+        let storedDeviceName = userDefaults.string(forKey: DefaultsKey.localDeviceName)
+        let defaultDeviceName = Host.current().localizedName ?? "我的 Mac"
+        let effectiveDeviceName = storedDeviceName?.isEmpty == false ? storedDeviceName! : defaultDeviceName
+        self.localDeviceName = effectiveDeviceName
         self.isAutoPasteEnabled = userDefaults.bool(forKey: DefaultsKey.autoPasteEnabled)
         self.isAccessibilityTrusted = PasteController.isAccessibilityTrusted
         self.customSensitivePatterns = userDefaults.stringArray(forKey: DefaultsKey.customSensitivePatterns) ?? []
         self.ignoredSourceApps = userDefaults.stringArray(forKey: DefaultsKey.ignoredSourceApps) ?? []
+        self.isLANSharingEnabled = userDefaults.bool(forKey: DefaultsKey.lanSharingEnabled)
+        let storedTrustedDeviceIDs = userDefaults.stringArray(forKey: DefaultsKey.lanTrustedDeviceIDs) ?? []
+        self.trustedDeviceIDs = storedTrustedDeviceIDs
+        self.shouldAutoCopyReceivedLANContent = userDefaults.bool(forKey: DefaultsKey.lanAutoCopyReceivedContent)
+        self.lanSharingService = LANSharingService(
+            localDevice: SharedDeviceIdentity(id: storedDeviceID, name: effectiveDeviceName),
+            trustedDeviceIDs: Set(storedTrustedDeviceIDs)
+        )
         items = store.all()
         monitor.onNewContent = { [weak self] content in
             Task { @MainActor in
                 self?.handleNewContent(content)
             }
+        }
+        configureLANSharingCallbacks()
+
+        if isLANSharingEnabled {
+            lanSharingService.start()
         }
     }
 
@@ -82,6 +122,25 @@ final class AppState: ObservableObject {
 
     func refreshItems() {
         items = store.all()
+    }
+
+    func captureScreenshotAndPin() async {
+        guard !isCapturingScreenshot else { return }
+        isCapturingScreenshot = true
+        screenshotErrorMessage = nil
+        defer { isCapturingScreenshot = false }
+
+        do {
+            let content = try await ScreenshotService.captureRegionToPasteboard()
+            monitor.markCurrentChangeAsHandled()
+            guard let item = store.upsert(content) else { return }
+            refreshItems()
+            showScreenshotPin?(item)
+        } catch ScreenshotServiceError.cancelled {
+            return
+        } catch {
+            screenshotErrorMessage = error.localizedDescription
+        }
     }
 
     func toggleAutoPaste() {
@@ -138,6 +197,90 @@ final class AppState: ObservableObject {
         saveIgnoredSourceApps()
     }
 
+    func setLANSharingEnabled(_ isEnabled: Bool) {
+        isLANSharingEnabled = isEnabled
+        userDefaults.set(isEnabled, forKey: DefaultsKey.lanSharingEnabled)
+
+        if isEnabled {
+            updateLANSharingService()
+            lanSharingService.start()
+        } else {
+            lanSharingService.stop()
+            discoveredDevices = []
+        }
+    }
+
+    func setLocalDeviceName(_ name: String) {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+
+        localDeviceName = normalized
+        userDefaults.set(normalized, forKey: DefaultsKey.localDeviceName)
+        updateLANSharingService()
+    }
+
+    func setAutoCopyReceivedLANContent(_ isEnabled: Bool) {
+        shouldAutoCopyReceivedLANContent = isEnabled
+        userDefaults.set(isEnabled, forKey: DefaultsKey.lanAutoCopyReceivedContent)
+    }
+
+    func trustDevice(_ device: SharedDevice) {
+        guard !trustedDeviceIDs.contains(device.id) else { return }
+        trustedDeviceIDs.append(device.id)
+        saveTrustedDeviceIDs()
+        removePairingRequest(for: device.id)
+        updateLANSharingService()
+
+        if discoveredDevices.contains(where: { $0.id == device.id }) {
+            lanSharingService.sendPairingRequest(to: device.id)
+        }
+    }
+
+    func removeTrustedDevice(_ device: SharedDevice) {
+        trustedDeviceIDs.removeAll { $0 == device.id }
+        saveTrustedDeviceIDs()
+        updateLANSharingService()
+    }
+
+    func send(_ item: ClipboardItem, to device: SharedDevice) {
+        guard trustedDeviceIDs.contains(device.id) else {
+            lanSharingMessage = "请先信任目标设备"
+            return
+        }
+
+        guard !shouldBlockLANSend(item) else {
+            lanSharingMessage = "内容命中敏感规则，已阻止发送"
+            return
+        }
+
+        do {
+            let payload = try ClipboardTransferPayload(item: item)
+            lanSharingService.send(payload: payload, to: device.id)
+            lanSharingMessage = "已发送接收请求到 \(device.name)，等待对方确认"
+        } catch {
+            lanSharingMessage = error.localizedDescription
+        }
+    }
+
+    func acceptIncomingClipboardRequest(_ request: IncomingClipboardRequest) {
+        guard incomingClipboardRequests.contains(where: { $0.id == request.id }) else { return }
+        incomingClipboardRequests.removeAll { $0.id == request.id }
+
+        let content = request.payload.clipboardContent(from: request.sourceDevice.name)
+        guard let item = store.upsert(content) else { return }
+        refreshItems()
+        lanSharingMessage = "已接收来自 \(request.sourceDevice.name) 的内容"
+
+        guard shouldAutoCopyReceivedLANContent else { return }
+        ClipboardWriter.write(item)
+        monitor.markCurrentChangeAsHandled()
+    }
+
+    func rejectIncomingClipboardRequest(_ request: IncomingClipboardRequest) {
+        incomingClipboardRequests.removeAll { $0.id == request.id }
+        lanSharingMessage = "已拒绝来自 \(request.sourceDevice.name) 的内容"
+    }
+
     private func handleNewContent(_ content: ClipboardContent) {
         guard !shouldIgnoreSourceApp(content.sourceApp) else { return }
         let filter = SensitiveFilter(extraPatterns: customSensitivePatterns)
@@ -167,6 +310,76 @@ final class AppState: ObservableObject {
     private func saveIgnoredSourceApps() {
         ignoredSourceApps.sort { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
         userDefaults.set(ignoredSourceApps, forKey: DefaultsKey.ignoredSourceApps)
+    }
+
+    private func saveTrustedDeviceIDs() {
+        trustedDeviceIDs.sort()
+        userDefaults.set(trustedDeviceIDs, forKey: DefaultsKey.lanTrustedDeviceIDs)
+    }
+
+    private func configureLANSharingCallbacks() {
+        lanSharingService.onDevicesChanged = { [weak self] devices in
+            Task { @MainActor in
+                self?.discoveredDevices = devices
+            }
+        }
+
+        lanSharingService.onPairingRequest = { [weak self] device in
+            Task { @MainActor in
+                self?.handlePairingRequest(from: device)
+            }
+        }
+
+        lanSharingService.onReceivedPayload = { [weak self] payload, sourceDevice in
+            Task { @MainActor in
+                self?.handleReceivedLANPayload(payload, from: sourceDevice)
+            }
+        }
+
+        lanSharingService.onError = { [weak self] message in
+            Task { @MainActor in
+                self?.lanSharingMessage = message
+            }
+        }
+    }
+
+    private func updateLANSharingService() {
+        lanSharingService.update(
+            localDevice: SharedDeviceIdentity(id: localDeviceID, name: localDeviceName),
+            trustedDeviceIDs: Set(trustedDeviceIDs)
+        )
+    }
+
+    private func handlePairingRequest(from device: SharedDevice) {
+        guard !trustedDeviceIDs.contains(device.id) else { return }
+        guard !pairingRequests.contains(where: { $0.id == device.id }) else { return }
+        pairingRequests.append(PairingRequest(device: device, receivedAt: Date()))
+        lanSharingMessage = "\(device.name) 请求配对"
+    }
+
+    private func handleReceivedLANPayload(
+        _ payload: ClipboardTransferPayload,
+        from sourceDevice: SharedDeviceIdentity
+    ) {
+        incomingClipboardRequests.append(
+            IncomingClipboardRequest(
+                sourceDevice: sourceDevice,
+                payload: payload,
+                receivedAt: Date()
+            )
+        )
+        lanSharingMessage = "\(sourceDevice.name) 发送了剪贴板内容，等待确认接收"
+        showLANReceivePrompt?()
+    }
+
+    private func removePairingRequest(for deviceID: String) {
+        pairingRequests.removeAll { $0.id == deviceID }
+    }
+
+    private func shouldBlockLANSend(_ item: ClipboardItem) -> Bool {
+        guard item.type == .text || item.type == .url else { return false }
+        let filter = SensitiveFilter(extraPatterns: customSensitivePatterns)
+        return filter.shouldIgnore(item.content)
     }
 
     private func shouldIgnoreSourceApp(_ sourceApp: String?) -> Bool {

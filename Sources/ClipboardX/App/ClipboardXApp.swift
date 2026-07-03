@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import SwiftUI
 
@@ -20,25 +21,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var monitoringMenuItem: NSMenuItem?
     private var autoPasteMenuItem: NSMenuItem?
+    private var screenshotMenuItem: NSMenuItem?
     private var historyWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var lanSharingWindow: NSWindow?
     private var targetApplication: NSRunningApplication?
     private var cancellables = Set<AnyCancellable>()
-    private lazy var hotKeyController = HotKeyController { [weak self] in
+    private let screenshotPinController = ScreenshotPinController()
+    private lazy var historyHotKeyController = HotKeyController { [weak self] in
         Task { @MainActor in
             self?.openHistory()
+        }
+    }
+    private lazy var screenshotHotKeyController = HotKeyController(
+        keyCode: UInt32(kVK_ANSI_A),
+        modifiers: UInt32(optionKey | shiftKey),
+        id: 2,
+        description: "Option+Shift+A"
+    ) { [weak self] in
+        Task { @MainActor in
+            self?.captureScreenshotAndPin()
         }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         bindAppState()
-        hotKeyController.register()
+        historyHotKeyController.register()
+        screenshotHotKeyController.register()
         appState.startMonitoring()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        hotKeyController.unregister()
+        historyHotKeyController.unregister()
+        screenshotHotKeyController.unregister()
         appState.stopMonitoring()
     }
 
@@ -48,6 +64,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "打开历史记录", action: #selector(openHistory), keyEquivalent: "v"))
+
+        let screenshotItem = NSMenuItem(title: "截图并固定", action: #selector(captureScreenshotAndPin), keyEquivalent: "a")
+        screenshotItem.keyEquivalentModifierMask = [.option, .shift]
+        screenshotMenuItem = screenshotItem
+        menu.addItem(screenshotItem)
+
+        menu.addItem(NSMenuItem(title: "局域网共享...", action: #selector(openLANSharing), keyEquivalent: ""))
+        menu.addItem(.separator())
 
         let monitoringItem = NSMenuItem(title: "", action: #selector(toggleMonitoring), keyEquivalent: "p")
         monitoringMenuItem = monitoringItem
@@ -72,6 +96,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.prepareForAutoPaste()
         }
 
+        appState.showScreenshotPin = { [weak self] item in
+            self?.screenshotPinController.show(item: item)
+        }
+
+        appState.showLANReceivePrompt = { [weak self] in
+            self?.openLANSharing()
+            NSApp.requestUserAttention(.informationalRequest)
+        }
+
         appState.$isMonitoring
             .sink { [weak self] _ in
                 self?.updateMonitoringMenuTitle()
@@ -87,6 +120,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appState.$isAccessibilityTrusted
             .sink { [weak self] _ in
                 self?.updateAutoPasteMenuTitle()
+            }
+            .store(in: &cancellables)
+
+        appState.$isCapturingScreenshot
+            .sink { [weak self] isCapturing in
+                self?.screenshotMenuItem?.isEnabled = !isCapturing
+                self?.screenshotMenuItem?.title = isCapturing ? "正在截图..." : "截图并固定"
+            }
+            .store(in: &cancellables)
+
+        appState.$screenshotErrorMessage
+            .compactMap { $0 }
+            .sink { message in
+                let alert = NSAlert()
+                alert.messageText = "截图失败"
+                alert.informativeText = message
+                alert.alertStyle = .warning
+                alert.runModal()
             }
             .store(in: &cancellables)
     }
@@ -138,6 +189,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc private func openLANSharing() {
+        if lanSharingWindow == nil {
+            let view = LANSharingView(appState: appState)
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.center()
+            window.title = "局域网共享"
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.contentView = NSHostingView(rootView: view)
+            lanSharingWindow = window
+        }
+
+        lanSharingWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func captureScreenshotAndPin() {
+        Task {
+            await appState.captureScreenshotAndPin()
+        }
+    }
+
     @objc private func toggleMonitoring() {
         appState.toggleMonitoring()
     }
@@ -161,6 +239,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         if notification.object as? NSWindow === settingsWindow {
             settingsWindow = nil
+        }
+
+        if notification.object as? NSWindow === lanSharingWindow {
+            lanSharingWindow = nil
         }
     }
 

@@ -3,13 +3,26 @@ import Foundation
 
 final class HotKeyController {
     private let hotKeySignature = OSType(0x434C5058) // CLPX
-    private let hotKeyIDValue: UInt32 = 1
+    private let hotKeyIDValue: UInt32
+    private let keyCode: UInt32
+    private let modifiers: UInt32
+    private let description: String
     private let onTrigger: () -> Void
 
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
 
-    init(onTrigger: @escaping () -> Void) {
+    init(
+        keyCode: UInt32 = UInt32(kVK_ANSI_V),
+        modifiers: UInt32 = UInt32(optionKey),
+        id: UInt32 = 1,
+        description: String = "Option+V",
+        onTrigger: @escaping () -> Void
+    ) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.hotKeyIDValue = id
+        self.description = description
         self.onTrigger = onTrigger
     }
 
@@ -69,8 +82,8 @@ final class HotKeyController {
 
         let hotKeyID = EventHotKeyID(signature: hotKeySignature, id: hotKeyIDValue)
         let hotKeyStatus = RegisterEventHotKey(
-            UInt32(kVK_ANSI_V),
-            UInt32(optionKey),
+            keyCode,
+            modifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -78,7 +91,7 @@ final class HotKeyController {
         )
 
         if hotKeyStatus != noErr {
-            print("ClipboardX failed to register Option+V hotkey: \(hotKeyStatus)")
+            print("ClipboardX failed to register \(description) hotkey: \(hotKeyStatus)")
             unregister()
         }
     }

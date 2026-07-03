@@ -51,8 +51,9 @@ final class ClipboardStore {
         }
     }
 
-    func upsert(_ content: ClipboardContent) {
-        guard let payload = storedPayload(for: content) else { return }
+    @discardableResult
+    func upsert(_ content: ClipboardContent) -> ClipboardItem? {
+        guard let payload = storedPayload(for: content) else { return nil }
 
         if let index = items.firstIndex(where: { $0.hash == payload.hash }) {
             let existing = items[index]
@@ -68,7 +69,7 @@ final class ClipboardStore {
             )
             items[index] = updatedItem
             persist(updatedItem)
-            return
+            return updatedItem
         }
 
         let item = ClipboardItem(
@@ -80,6 +81,7 @@ final class ClipboardStore {
         items.insert(item, at: 0)
         persist(item)
         trim()
+        return item
     }
 
     func upsertText(_ text: String) {

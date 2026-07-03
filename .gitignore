@@ -20,7 +20,5 @@ DerivedData/
 # Local environment
 .env
 /.idea/.gitignore
-/ClipboardX/Info.plist
 /.idea/misc.xml
 /.idea/modules.xml
-/ClipboardX.xcodeproj/project.pbxproj

@@ -124,9 +124,11 @@ struct HistoryView: View {
                 List(visibleItems) { item in
                     ClipboardItemRow(
                         item: item,
+                        trustedDevices: appState.discoveredDevices.filter(\.isTrusted),
                         onCopy: { appState.copy(item) },
                         onTogglePinned: { appState.togglePinned(item) },
-                        onDelete: { appState.delete(item) }
+                        onDelete: { appState.delete(item) },
+                        onSend: { device in appState.send(item, to: device) }
                     )
                 }
                 .listStyle(.inset)
@@ -137,9 +139,11 @@ struct HistoryView: View {
 
 private struct ClipboardItemRow: View {
     let item: ClipboardItem
+    let trustedDevices: [SharedDevice]
     let onCopy: () -> Void
     let onTogglePinned: () -> Void
     let onDelete: () -> Void
+    let onSend: (SharedDevice) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -152,6 +156,24 @@ private struct ClipboardItemRow: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 4) {
+                if item.isLANShareable && !trustedDevices.isEmpty {
+                    Menu {
+                        ForEach(trustedDevices) { device in
+                            Button {
+                                onSend(device)
+                            } label: {
+                                Label(device.name, systemImage: "desktopcomputer")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "paperplane")
+                            .frame(width: 24, height: 24)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .accessibilityLabel("发送到局域网设备")
+                    .help("发送到局域网设备")
+                }
+
                 Button(action: onTogglePinned) {
                     Image(systemName: item.isPinned ? "pin.fill" : "pin")
                         .frame(width: 24, height: 24)
@@ -243,5 +265,11 @@ private struct ClipboardItemRow: View {
                 .foregroundStyle(item.isPinned ? .yellow : .secondary)
                 .frame(width: 44, height: 44)
         }
+    }
+}
+
+private extension ClipboardItem {
+    var isLANShareable: Bool {
+        type == .text || type == .url || type == .image
     }
 }
