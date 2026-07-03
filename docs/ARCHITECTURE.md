@@ -2,240 +2,249 @@
 
 ## 1. Overview
 
-ClipboardX is designed as a native macOS menu bar utility.
+ClipboardX is a native macOS menu bar utility. The repository now contains a standard Xcode macOS App project at `ClipboardX.xcodeproj`, while `Package.swift` remains available for lightweight SwiftPM build checks.
 
 The application has four core responsibilities:
 
-1. Monitor clipboard changes
-2. Normalize and filter clipboard data
-3. Persist clipboard history locally
-4. Provide a fast UI for search and reuse
+1. Monitor clipboard changes.
+2. Normalize, classify, and filter clipboard data.
+3. Persist clipboard history and local image resources.
+4. Provide fast search, copy, and paste workflows from a menu bar UI.
 
-## 2. High-level Architecture
+## 2. Project Shape
+
+```text
+ClipboardX
+├── ClipboardX.xcodeproj
+├── ClipboardX
+│   ├── Assets.xcassets
+│   │   └── AppIcon.appiconset
+│   └── Info.plist
+├── Package.swift
+├── Sources
+│   └── ClipboardX
+│       ├── App
+│       ├── Clipboard
+│       ├── Security
+│       ├── Storage
+│       └── UI
+└── docs
+```
+
+The Xcode target builds `ClipboardX.app` as a macOS application bundle. `Info.plist` sets `LSUIElement` so the app runs as a menu bar utility instead of showing a normal Dock icon. `Assets.xcassets` provides the app icon used by builds and archives.
+
+## 3. Runtime Architecture
 
 ```text
 NSPasteboard.general
         ↓
 ClipboardMonitor
         ↓
-ClipboardReader
+ClipboardContentClassifier
         ↓
 SensitiveFilter
         ↓
-DedupService / HashService
+HashService
         ↓
 ClipboardStore
         ↓
-HistoryWindow / HistoryListView
+HistoryView / SettingsView
         ↓
 ClipboardWriter
         ↓
-NSPasteboard.general
+PasteController
+        ↓
+Foreground macOS app
 ```
 
-## 3. Modules
+## 4. Modules
 
-## 3.1 App
-
-Entry point and lifecycle management.
+### 4.1 App
 
 Files:
 
-- `ClipboardXApp.swift`
-- `AppDelegate.swift`
-- `MenuBarController.swift`
+- `Sources/ClipboardX/App/ClipboardXApp.swift`
+- `Sources/ClipboardX/App/AppState.swift`
+- `Sources/ClipboardX/App/HotKeyController.swift`
+- `Sources/ClipboardX/App/PasteController.swift`
 
 Responsibilities:
 
-- Initialize the clipboard monitor
-- Initialize the local store
-- Create menu bar icon and menu
-- Open the history window
-- Handle app quit
+- Initialize the SwiftUI app lifecycle.
+- Own shared app state and settings.
+- Create the menu bar entry and app commands.
+- Register the `Option + V` global shortcut.
+- Restore the previously active app and optionally simulate `Cmd + V` after selecting history.
 
-## 3.2 Clipboard
+### 4.2 Clipboard
 
 Files:
 
-- `ClipboardMonitor.swift`
-- `ClipboardReader.swift`
-- `ClipboardWriter.swift`
+- `Sources/ClipboardX/Clipboard/ClipboardContent.swift`
+- `Sources/ClipboardX/Clipboard/ClipboardContentClassifier.swift`
+- `Sources/ClipboardX/Clipboard/ClipboardMonitor.swift`
+- `Sources/ClipboardX/Clipboard/ClipboardWriter.swift`
 
 Responsibilities:
 
-- Poll `NSPasteboard.changeCount`
-- Read supported clipboard data types
-- Write selected history items back to clipboard
+- Poll `NSPasteboard.changeCount`.
+- Read text, URLs, file URLs, and images.
+- Convert clipboard data into normalized `ClipboardContent`.
+- Write selected history items back to `NSPasteboard.general`.
+- Avoid re-recording clipboard writes initiated by ClipboardX itself.
 
-MVP only supports plain text.
-
-Future supported types:
-
-- URL
-- Image
-- File path
-- HTML
-- Rich text
-
-## 3.3 Models
+### 4.3 Security
 
 Files:
 
-- `ClipboardItem.swift`
-- `ClipboardItemType.swift`
+- `Sources/ClipboardX/Security/SensitiveFilter.swift`
 
 Responsibilities:
 
-- Define clipboard history entities
-- Define supported item types
-- Provide preview generation
+- Apply default sensitive-content rules.
+- Apply user-defined sensitive rules.
+- Ignore content copied from user-configured source apps.
+- Keep privacy controls local through `UserDefaults`.
 
-## 3.4 Storage
+### 4.4 Storage
 
 Files:
 
-- `ClipboardStore.swift`
-- `FileClipboardStore.swift`
-- `HashService.swift`
+- `Sources/ClipboardX/Storage/ClipboardItem.swift`
+- `Sources/ClipboardX/Storage/ClipboardItemType.swift`
+- `Sources/ClipboardX/Storage/ClipboardStore.swift`
+- `Sources/ClipboardX/Storage/HashService.swift`
 
 Responsibilities:
 
-- Store clipboard history locally
-- Deduplicate by content hash
-- Search and sort history items
-- Enforce max history count
+- Store clipboard metadata in SQLite.
+- Save image payloads in an application support image directory.
+- Deduplicate by content hash.
+- Pin, delete, clear, search, and trim history.
+- Migrate legacy JSON history into SQLite on first launch.
+- Clean unused image resources after deletes and trims.
 
-MVP storage is JSON-based for quick startup. Production storage should migrate to SQLite or SwiftData.
-
-## 3.5 Security
+### 4.5 UI
 
 Files:
 
-- `SensitiveFilter.swift`
+- `Sources/ClipboardX/UI/HistoryView.swift`
+- `Sources/ClipboardX/UI/SettingsView.swift`
 
 Responsibilities:
 
-- Filter sensitive clipboard content before persistence
-- Provide default rules for keys, tokens, passwords, and verification codes
+- Show searchable clipboard history.
+- Filter by content type.
+- Show source app, preview text, and image thumbnails.
+- Expose copy, delete, pin, clear, pause, and settings workflows.
+- Manage custom sensitive rules and ignored source apps.
 
-## 3.6 UI
+## 5. Main Flows
 
-Files:
-
-- `HistoryWindowController.swift`
-- `HistoryView.swift`
-- `HistoryListView.swift`
-
-Responsibilities:
-
-- Display clipboard history
-- Search history
-- Copy selected history item
-- Clear history
-
-## 4. Runtime Flow
-
-## 4.1 Copy New Text
+### 5.1 Capture Clipboard Content
 
 ```text
-User copies text
+User copies content
     ↓
 macOS updates NSPasteboard.general
     ↓
-ClipboardMonitor sees changeCount changed
+ClipboardMonitor detects changeCount update
     ↓
-ClipboardReader reads text
+ClipboardContentClassifier reads supported content
     ↓
-SensitiveFilter checks if it should be ignored
+SensitiveFilter checks content and source app
     ↓
-HashService generates content hash
+HashService generates a stable hash
     ↓
-ClipboardStore inserts new item or updates old item timestamp
+ClipboardStore inserts a new item or refreshes an existing one
     ↓
-UI refreshes history list
+HistoryView refreshes from in-memory state
 ```
 
-## 4.2 Reuse History Item
+Supported captured types:
+
+- Plain text.
+- URL text.
+- File URLs.
+- Images saved as PNG resources.
+
+### 5.2 Reuse History Item
 
 ```text
-User opens history window
+User opens history with menu bar item or Option + V
     ↓
-User searches or selects item
+User selects a history item
     ↓
-ClipboardWriter writes item content to NSPasteboard.general
+ClipboardWriter writes the item to NSPasteboard.general
     ↓
-Current active app can paste the selected content manually
+ClipboardStore updates the item timestamp
+    ↓
+Optional PasteController restores the prior app and sends Cmd + V
 ```
 
-Automatic paste is intentionally not part of MVP because it requires Accessibility permissions and simulated keyboard events.
+Automatic paste is guarded by macOS Accessibility permission. If permission is missing, ClipboardX opens the system permission prompt instead of sending keyboard events.
 
-## 5. Storage Strategy
+### 5.3 Manage Privacy
 
-### MVP
+```text
+User opens Settings
+    ↓
+User adds sensitive rules or ignored source apps
+    ↓
+Settings are saved to UserDefaults
+    ↓
+Future clipboard captures are filtered before persistence
+```
 
-- JSON file in Application Support directory
-- Simple to inspect and debug
-- Enough for early local development
+## 6. Storage Strategy
 
-### Production
+SQLite is the primary local store:
 
-Recommended migration path:
+- Database path: `~/Library/Application Support/ClipboardX/clipboard-history.sqlite`.
+- Image path: `~/Library/Application Support/ClipboardX/Images/`.
+- `clipboard_items` stores id, type, content path/value, preview, hash, source app, pin state, and timestamps.
+- `metadata` stores internal migration state.
+- WAL mode is enabled for safer frequent writes.
+- Search currently uses the loaded in-memory list; SQLite FTS5 can be added later for larger histories.
 
-1. SQLite local database
-2. SQLite FTS for search
-3. Optional SQLCipher or encrypted blob storage
-4. Separate local file directory for images and files
+## 7. Privacy Strategy
 
-## 6. Privacy Strategy
+ClipboardX uses local-first defaults:
 
-Clipboard history can contain sensitive information. ClipboardX should adopt safe defaults:
+- Clipboard history stays on device.
+- Network sync is not enabled by default.
+- Default sensitive rules block common tokens, passwords, private keys, and verification codes.
+- Users can pause monitoring, clear history, add custom sensitive rules, and ignore selected source apps.
+- Future CloudKit or LAN sync should remain explicit opt-in.
 
-- Local-only by default
-- No network sync in MVP
-- Sensitive content rules enabled by default
-- Clear history operation exposed in menu
-- Pause monitoring operation exposed in menu
+## 8. Extension Points
 
-## 7. Extension Points
-
-### 7.1 CloudKit Sync
-
-Future component:
+### 8.1 CloudKit Sync
 
 ```text
 ClipboardStore
     ↓
-CloudKitSyncService
+SyncService
     ↓
 iCloud private database
 ```
 
-Before syncing:
+Before sync is enabled, sensitive filtering, user opt-in, conflict handling, and encryption strategy should be finalized.
 
-- Filter sensitive content
-- Encrypt payloads where possible
-- Allow users to opt in explicitly
-
-### 7.2 LAN Sharing
-
-Future component:
+### 8.2 LAN Sharing
 
 ```text
 Bonjour discovery
     ↓
-WebSocket channel
+Authenticated device pairing
     ↓
-Device authentication
+Encrypted local channel
     ↓
-Encrypted clipboard item exchange
+Clipboard item exchange
 ```
 
-Useful for private office or local-network workflows.
+LAN sharing should keep the same local-first privacy model and require explicit device trust.
 
-## 8. Current Scaffold Limitations
+### 8.3 Search Scaling
 
-- Swift Package Manager can build and run the code as a native macOS executable
-- A production `.app` bundle should be created later with Xcode
-- Global shortcut is not implemented yet
-- SQLite/SwiftData is not implemented yet
-- Image/file clipboard types are not implemented yet
+The current in-memory search is sufficient for the configured 1,000 item local history. If the history limit grows, add SQLite FTS5 indexing over preview/content/source fields.

@@ -49,6 +49,8 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 
 | 功能 | 说明 | 优先级 | 状态 |
 |---|---|---|---|
+| 标准 macOS App 工程 | 通过 `ClipboardX.xcodeproj` 构建 `ClipboardX.app` | P0 | 已完成 |
+| App 图标 | 使用 `Assets.xcassets/AppIcon.appiconset` 作为应用图标 | P1 | 已完成 |
 | 菜单栏常驻 | App 启动后显示在 macOS 菜单栏 | P0 | 已完成 |
 | 剪贴板监听 | 通过 NSPasteboard.changeCount 监听变化 | P0 | 已完成 |
 | 文本记录 | 记录纯文本内容 | P0 | 已完成 |
@@ -213,33 +215,44 @@ ClipboardX 第一阶段目标是实现一个可长期运行在 macOS 菜单栏�
 
 ```text
 ClipboardX
-├── App
-│   ├── ClipboardXApp.swift
-│   ├── AppState.swift
-│   ├── HotKeyController.swift
-│   └── PasteController.swift
-├── Clipboard
-│   ├── ClipboardContent.swift
-│   ├── ClipboardContentClassifier.swift
-│   ├── ClipboardMonitor.swift
-│   └── ClipboardWriter.swift
-├── Security
-│   └── SensitiveFilter.swift
-├── Storage
-│   ├── ClipboardItem.swift
-│   ├── ClipboardItemType.swift
-│   ├── ClipboardStore.swift
-│   └── HashService.swift
-└── UI
-    ├── HistoryView.swift
-    └── SettingsView.swift
+├── ClipboardX.xcodeproj
+├── ClipboardX
+│   ├── Assets.xcassets
+│   │   └── AppIcon.appiconset
+│   └── Info.plist
+├── Package.swift
+└── Sources
+    └── ClipboardX
+        ├── App
+        │   ├── ClipboardXApp.swift
+        │   ├── AppState.swift
+        │   ├── HotKeyController.swift
+        │   └── PasteController.swift
+        ├── Clipboard
+        │   ├── ClipboardContent.swift
+        │   ├── ClipboardContentClassifier.swift
+        │   ├── ClipboardMonitor.swift
+        │   └── ClipboardWriter.swift
+        ├── Security
+        │   └── SensitiveFilter.swift
+        ├── Storage
+        │   ├── ClipboardItem.swift
+        │   ├── ClipboardItemType.swift
+        │   ├── ClipboardStore.swift
+        │   └── HashService.swift
+        └── UI
+            ├── HistoryView.swift
+            └── SettingsView.swift
 ```
 
 ## 10. 开发里程碑
 
 ### Milestone 1：基础可运行
 
-- [x] 初始化 Swift Package。
+- [x] 初始化 Swift Package 辅助构建。
+- [x] 建立标准 Xcode macOS App 工程。
+- [x] 构建 `ClipboardX.app` 应用包。
+- [x] 接入 App 图标资源。
 - [x] App 启动后显示菜单栏图标。
 - [x] 后台监听剪贴板文本。
 - [x] SQLite 本地保存历史。
@@ -282,10 +295,11 @@ ClipboardX
 
 ## 11. 当前开发进度
 
-截至 2026-07-03，ClipboardX 已完成菜单栏常驻、剪贴板监听、文本/链接/文件/图片记录、搜索、类型过滤、点击复制、自动粘贴、去重、敏感内容过滤、自定义敏感规则、来源应用黑名单、暂停监听、清空历史、收藏置顶、单条删除、来源应用展示、设置窗口、Option + V 全局快捷键、SQLite 本地持久化、旧 JSON 自动迁移和图片资源管理。
+截至 2026-07-03，ClipboardX 已完成标准 Xcode macOS App 工程、`ClipboardX.app` 应用包构建、App 图标资源、菜单栏常驻、剪贴板监听、文本/链接/文件/图片记录、搜索、类型过滤、点击复制、自动粘贴、去重、敏感内容过滤、自定义敏感规则、来源应用黑名单、暂停监听、清空历史、收藏置顶、单条删除、来源应用展示、设置窗口、Option + V 全局快捷键、SQLite 本地持久化、旧 JSON 自动迁移和图片资源管理。
 
 仍未完成的主要功能：
 
+- 正式开发者证书签名、公证与分发流程。
 - SQLite FTS5 搜索增强。
 - CloudKit 多设备同步。
 - 局域网同步与设备管理。

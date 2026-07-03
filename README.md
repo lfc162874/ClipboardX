@@ -8,7 +8,7 @@ ClipboardX 是一个轻量、隐私优先的 macOS 剪贴板历史工具，用�
 
 ## 当前阶段
 
-当前仓库已初始化为 Swift Package 结构，先实现 macOS 菜单栏常驻 App 的核心骨架：
+当前仓库已转换为标准 Xcode macOS App 工程，并已实现菜单栏常驻 App 的核心能力：
 
 - 菜单栏入口
 - 剪贴板监听
@@ -26,8 +26,10 @@ ClipboardX 是一个轻量、隐私优先的 macOS 剪贴板历史工具，用�
 - 设置窗口
 - 自定义敏感过滤规则
 - 忽略来源应用
+- `ClipboardX.app` 应用包构建
+- App 图标资源
 
-后续可以继续扩展自动粘贴体验、CloudKit 同步和局域网同步等能力。
+后续可以继续扩展 CloudKit 同步、局域网同步和正式分发签名等能力。
 
 ## 技术选型
 
@@ -38,15 +40,23 @@ ClipboardX 是一个轻量、隐私优先的 macOS 剪贴板历史工具，用�
 | 剪贴板 | NSPasteboard |
 | 菜单栏 | NSStatusItem |
 | 数据存储 | SQLite + 本地图片资源目录 |
+| 工程 | Xcode macOS App target，保留 SwiftPM 辅助构建 |
 | 同步 | 后续 CloudKit / 局域网同步 |
 
 ## 目录结构
 
 ```text
 ClipboardX
+├── ClipboardX.xcodeproj
+├── ClipboardX
+│   ├── Assets.xcassets
+│   │   └── AppIcon.appiconset
+│   └── Info.plist
 ├── Package.swift
 ├── README.md
 ├── docs
+│   ├── ARCHITECTURE.md
+│   ├── PRD.md
 │   └── REQUIREMENTS.md
 └── Sources
     └── ClipboardX
@@ -60,16 +70,16 @@ ClipboardX
 ## 本地运行
 
 ```bash
-swift run ClipboardX
+open ClipboardX.xcodeproj
 ```
 
-也可以使用 Xcode 打开 Swift Package：
+然后选择 `ClipboardX` scheme 和 `My Mac` 运行。工程会构建标准 macOS 应用包 `ClipboardX.app`，并以菜单栏 App 形式启动。
+
+也可以继续使用 SwiftPM 做辅助编译检查：
 
 ```bash
-open Package.swift
+swift build
 ```
-
-然后选择 `ClipboardX` scheme 和 `My Mac` 运行。
 
 如果你本地曾经手动创建过同名 Swift 文件，例如：
 
@@ -85,6 +95,8 @@ Sources/ClipboardX/Clipboard/ClipboardWriter.swift
 - [x] 初始化仓库结构
 - [x] 编写需求文档
 - [x] 建立 macOS 菜单栏 App 基础骨架
+- [x] 转换为标准 Xcode macOS App 工程
+- [x] 接入 App 图标资源
 - [x] 支持本地 SQLite 持久化
 - [x] 支持旧 JSON 历史自动迁移
 - [x] 支持快捷键 Option + V

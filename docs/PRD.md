@@ -39,8 +39,7 @@ Initial positioning:
 - LAN clipboard sharing
 - OCR for copied images
 - Rich text fidelity preservation
-- Automatic paste through Accessibility permissions
-- Full `.app` distribution packaging
+- App Store distribution, notarization, and release packaging
 
 These features are planned for later iterations.
 
@@ -104,20 +103,19 @@ Acceptance criteria:
 
 - Use `NSPasteboard.general`
 - Poll `changeCount` at a short interval
-- Read plain text through `.string`
-- Ignore unsupported types in MVP
+- Read plain text, URL text, file URLs, and images
+- Ignore unsupported rich clipboard formats until explicit support is added
 
 ## 6.3 History Storage
 
-MVP storage may use a local JSON file for quick scaffolding.
+Current storage:
 
-Planned production storage:
+- SQLite stores clipboard metadata locally
+- A separate application support directory stores image resources
+- Legacy JSON history is migrated automatically on first launch
+- Optional encrypted storage can be evaluated before sync or distribution
 
-- SQLite or SwiftData
-- Separate blob storage for images/files
-- Optional encrypted database
-
-Recommended future table:
+Core table:
 
 ```sql
 CREATE TABLE clipboard_item (
@@ -159,11 +157,16 @@ Default filtering should include:
 
 Additional planned privacy controls:
 
+- Auto-delete after N days
+- Optional encrypted storage
+
+Implemented privacy controls:
+
 - App blacklist
 - Manual pause mode
 - Max history limit
-- Auto-delete after N days
-- Optional encrypted storage
+- Custom sensitive-content rules
+- Local-only default storage
 
 ## 8. Product Roadmap
 
