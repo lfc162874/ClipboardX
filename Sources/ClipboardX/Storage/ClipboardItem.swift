@@ -15,6 +15,7 @@ struct ClipboardItem: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         type: ClipboardItemType,
         content: String,
+        hash: String? = nil,
         sourceApp: String? = nil,
         isPinned: Bool = false,
         createdAt: Date = Date(),
@@ -23,23 +24,37 @@ struct ClipboardItem: Identifiable, Codable, Equatable {
         self.id = id
         self.type = type
         self.content = content
-        self.preview = ClipboardItem.makePreview(content)
-        self.hash = HashService.sha256(content)
+        self.preview = ClipboardItem.makePreview(content, type: type)
+        self.hash = hash ?? HashService.sha256(content)
         self.sourceApp = sourceApp
         self.isPinned = isPinned
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
-    private static func makePreview(_ content: String) -> String {
-        let normalized = content
+    private static func makePreview(_ content: String, type: ClipboardItemType) -> String {
+        let normalized: String
+
+        if type == .image {
+            normalized = URL(fileURLWithPath: content).lastPathComponent
+        } else if type == .file {
+            normalized = content
+                .split(whereSeparator: \.isNewline)
+                .map { URL(fileURLWithPath: String($0)).lastPathComponent }
+                .joined(separator: ", ")
+        } else {
+            normalized = content
+                .replacingOccurrences(of: "\n", with: " ")
+        }
+
+        let trimmed = normalized
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if normalized.count <= 120 {
-            return normalized
+        if trimmed.count <= 120 {
+            return trimmed
         }
 
-        return String(normalized.prefix(120)) + "..."
+        return String(trimmed.prefix(120)) + "..."
     }
 }

@@ -11,9 +11,10 @@ final class AppState: ObservableObject {
     private let filter = SensitiveFilter()
 
     init() {
-        monitor.onNewText = { [weak self] text in
+        items = store.all()
+        monitor.onNewContent = { [weak self] content in
             Task { @MainActor in
-                self?.handleNewText(text)
+                self?.handleNewContent(content)
             }
         }
     }
@@ -40,18 +41,33 @@ final class AppState: ObservableObject {
     }
 
     func copy(_ item: ClipboardItem) {
-        ClipboardWriter.writeText(item.content)
+        guard ClipboardWriter.write(item) else { return }
+        monitor.markCurrentChangeAsHandled()
         store.touch(item)
-        items = store.all()
+        refreshItems()
+    }
+
+    func togglePinned(_ item: ClipboardItem) {
+        store.togglePinned(item)
+        refreshItems()
+    }
+
+    func delete(_ item: ClipboardItem) {
+        store.delete(item)
+        refreshItems()
     }
 
     func search(_ keyword: String) -> [ClipboardItem] {
         store.search(keyword)
     }
 
-    private func handleNewText(_ text: String) {
-        guard !filter.shouldIgnore(text) else { return }
-        store.upsertText(text)
+    func refreshItems() {
         items = store.all()
+    }
+
+    private func handleNewContent(_ content: ClipboardContent) {
+        guard !filter.shouldIgnore(content.content) else { return }
+        store.upsert(content)
+        refreshItems()
     }
 }

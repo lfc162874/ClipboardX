@@ -13,10 +13,15 @@ ClipboardX 是一个轻量、隐私优先的 macOS 剪贴板历史工具，用�
 - 菜单栏入口
 - 剪贴板监听
 - 文本历史记录
+- URL 与文件路径识别
+- 图片剪贴板记录与写回
 - 内容去重
 - 隐私过滤
-- 本地内存存储骨架
-- 搜索面板 UI 骨架
+- 本地 JSON 持久化
+- 搜索、类型过滤与图片缩略图
+- Option + V 全局快捷键唤起历史窗口
+- 收藏置顶与单条删除
+- 来源应用展示
 
 后续可以逐步替换为 SQLite / SwiftData 持久化，并扩展图片、文件、URL、CloudKit 同步等能力。
 
@@ -28,7 +33,7 @@ ClipboardX 是一个轻量、隐私优先的 macOS 剪贴板历史工具，用�
 | UI | SwiftUI + AppKit |
 | 剪贴板 | NSPasteboard |
 | 菜单栏 | NSStatusItem |
-| 数据存储 | 第一阶段内存存储，后续 SQLite / SwiftData |
+| 数据存储 | 第一阶段 JSON 持久化，后续 SQLite / SwiftData |
 | 同步 | 后续 CloudKit / 局域网同步 |
 
 ## 目录结构
@@ -76,9 +81,14 @@ Sources/ClipboardX/Clipboard/ClipboardWriter.swift
 - [x] 初始化仓库结构
 - [x] 编写需求文档
 - [x] 建立 macOS 菜单栏 App 基础骨架
+- [x] 支持本地 JSON 持久化
+- [x] 支持快捷键 Option + V
+- [x] 支持 URL 类型识别
+- [x] 支持文件路径记录
+- [x] 支持图片类型
+- [x] 支持收藏置顶
+- [x] 支持单条删除
+- [x] 支持搜索面板增强
 - [ ] 支持 SQLite / SwiftData 持久化
-- [ ] 支持快捷键 Option + V
-- [ ] 支持搜索面板增强
-- [ ] 支持图片 / 文件 / URL 类型
 - [ ] 支持自动粘贴，需要 Accessibility 权限
 - [ ] 支持 CloudKit 多设备同步
