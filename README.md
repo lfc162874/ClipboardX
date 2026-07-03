@@ -54,7 +54,22 @@ ClipboardX
 swift run ClipboardX
 ```
 
-如果需要做成真正的 `.app` 菜单栏应用，建议下一步使用 Xcode 创建 macOS App 工程，或继续补充 app bundle 打包脚本。
+也可以使用 Xcode 打开 Swift Package：
+
+```bash
+open Package.swift
+```
+
+然后选择 `ClipboardX` scheme 和 `My Mac` 运行。
+
+如果你本地曾经手动创建过同名 Swift 文件，例如：
+
+```text
+Sources/ClipboardX/ClipboardWriter.swift
+Sources/ClipboardX/Clipboard/ClipboardWriter.swift
+```
+
+需要删除多余文件，Swift Package 的同一个 target 内不允许出现两个相同文件名。
 
 ## Roadmap
 
