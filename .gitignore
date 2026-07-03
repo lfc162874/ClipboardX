@@ -1,8 +1,21 @@
+# macOS
 .DS_Store
+
+# Swift Package Manager
 .build/
 .swiftpm/
+Package.resolved
+
+# Xcode
 DerivedData/
 *.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcuserstate
+
+# Build artifacts
+*.app
+*.dSYM
+
+# Local environment
 .env
