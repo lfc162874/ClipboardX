@@ -19,6 +19,7 @@ struct ClipboardXApp {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let appState = AppState()
     private var statusItem: NSStatusItem?
+    private var historyMenuItem: NSMenuItem?
     private var monitoringMenuItem: NSMenuItem?
     private var autoPasteMenuItem: NSMenuItem?
     private var screenshotMenuItem: NSMenuItem?
@@ -30,9 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var reportedHotKeyFailures = Set<String>()
     private let screenshotPinController = ScreenshotPinController()
     private lazy var historyHotKeyController = HotKeyController(
-        description: "Option+V",
+        description: appState.historyShortcut.displayString,
         onRegistrationFailure: { [weak self] message in
             Task { @MainActor in
+                self?.appState.setHotKeyRegistrationMessage(message)
                 self?.showHotKeyRegistrationFailure(message)
             }
         }
@@ -45,9 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         keyCode: UInt32(kVK_ANSI_A),
         modifiers: UInt32(optionKey | shiftKey),
         id: 2,
-        description: "Option+Shift+A",
+        description: appState.screenshotShortcut.displayString,
         onRegistrationFailure: { [weak self] message in
             Task { @MainActor in
+                self?.appState.setHotKeyRegistrationMessage(message)
                 self?.showHotKeyRegistrationFailure(message)
             }
         }
@@ -60,8 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         bindAppState()
-        historyHotKeyController.register()
-        screenshotHotKeyController.register()
+        registerHotKeys()
         appState.startMonitoring()
     }
 
@@ -76,12 +78,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem?.button?.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipboardX")
 
         let menu = NSMenu()
-        let historyItem = NSMenuItem(title: "打开历史记录", action: #selector(openHistory), keyEquivalent: "v")
-        historyItem.keyEquivalentModifierMask = [.option]
+        let historyItem = NSMenuItem(
+            title: "打开历史记录",
+            action: #selector(openHistory),
+            keyEquivalent: appState.historyShortcut.menuKeyEquivalent
+        )
+        historyMenuItem = historyItem
+        configure(historyItem, shortcut: appState.historyShortcut)
         menu.addItem(historyItem)
 
-        let screenshotItem = NSMenuItem(title: "截图并固定", action: #selector(captureScreenshotAndPin), keyEquivalent: "a")
-        screenshotItem.keyEquivalentModifierMask = [.option, .shift]
+        let screenshotItem = NSMenuItem(
+            title: "截图并固定",
+            action: #selector(captureScreenshotAndPin),
+            keyEquivalent: appState.screenshotShortcut.menuKeyEquivalent
+        )
+        configure(screenshotItem, shortcut: appState.screenshotShortcut)
         screenshotMenuItem = screenshotItem
         menu.addItem(screenshotItem)
 
@@ -142,6 +153,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sink { [weak self] isCapturing in
                 self?.screenshotMenuItem?.isEnabled = !isCapturing
                 self?.screenshotMenuItem?.title = isCapturing ? "正在截图..." : "截图并固定"
+            }
+            .store(in: &cancellables)
+
+        appState.$historyShortcut
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.updateShortcutMenuItems()
+                self?.registerHotKeys()
+            }
+            .store(in: &cancellables)
+
+        appState.$screenshotShortcut
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.updateShortcutMenuItems()
+                self?.registerHotKeys()
             }
             .store(in: &cancellables)
 
@@ -280,6 +307,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
+    }
+
+    private func registerHotKeys() {
+        reportedHotKeyFailures.removeAll()
+        appState.setHotKeyRegistrationMessage(nil)
+        historyHotKeyController.update(
+            shortcut: appState.historyShortcut,
+            description: "打开历史记录 \(appState.historyShortcut.displayString)"
+        )
+        screenshotHotKeyController.update(
+            shortcut: appState.screenshotShortcut,
+            description: "截图并固定 \(appState.screenshotShortcut.displayString)"
+        )
+    }
+
+    private func updateShortcutMenuItems() {
+        configure(historyMenuItem, shortcut: appState.historyShortcut)
+        configure(screenshotMenuItem, shortcut: appState.screenshotShortcut)
+    }
+
+    private func configure(_ menuItem: NSMenuItem?, shortcut: AppShortcut) {
+        menuItem?.keyEquivalent = shortcut.menuKeyEquivalent
+        menuItem?.keyEquivalentModifierMask = shortcut.menuModifierMask
     }
 
     private func rememberTargetApplication() {

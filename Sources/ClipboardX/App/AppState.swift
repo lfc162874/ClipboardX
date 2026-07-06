@@ -12,6 +12,8 @@ final class AppState: ObservableObject {
         static let lanSharingEnabled = "lanSharingEnabled"
         static let lanTrustedDeviceIDs = "lanTrustedDeviceIDs"
         static let lanAutoCopyReceivedContent = "lanAutoCopyReceivedContent"
+        static let historyShortcut = "historyShortcut"
+        static let screenshotShortcut = "screenshotShortcut"
     }
 
     @Published private(set) var isMonitoring = false
@@ -30,6 +32,9 @@ final class AppState: ObservableObject {
     @Published private(set) var trustedDeviceIDs: [String]
     @Published private(set) var shouldAutoCopyReceivedLANContent: Bool
     @Published private(set) var lanSharingMessage: String?
+    @Published private(set) var historyShortcut: AppShortcut
+    @Published private(set) var screenshotShortcut: AppShortcut
+    @Published private(set) var hotKeyRegistrationMessage: String?
 
     private let store = ClipboardStore()
     private let monitor = ClipboardMonitor()
@@ -60,6 +65,16 @@ final class AppState: ObservableObject {
         let storedTrustedDeviceIDs = userDefaults.stringArray(forKey: DefaultsKey.lanTrustedDeviceIDs) ?? []
         self.trustedDeviceIDs = storedTrustedDeviceIDs
         self.shouldAutoCopyReceivedLANContent = userDefaults.bool(forKey: DefaultsKey.lanAutoCopyReceivedContent)
+        self.historyShortcut = Self.shortcut(
+            forKey: DefaultsKey.historyShortcut,
+            defaultValue: .defaultHistory,
+            userDefaults: userDefaults
+        )
+        self.screenshotShortcut = Self.shortcut(
+            forKey: DefaultsKey.screenshotShortcut,
+            defaultValue: .defaultScreenshot,
+            userDefaults: userDefaults
+        )
         self.lanSharingService = LANSharingService(
             localDevice: SharedDeviceIdentity(id: storedDeviceID, name: effectiveDeviceName),
             trustedDeviceIDs: Set(storedTrustedDeviceIDs)
@@ -224,6 +239,40 @@ final class AppState: ObservableObject {
         userDefaults.set(isEnabled, forKey: DefaultsKey.lanAutoCopyReceivedContent)
     }
 
+    func setHistoryShortcut(_ shortcut: AppShortcut) {
+        guard shortcut != screenshotShortcut else {
+            hotKeyRegistrationMessage = "打开历史记录和截图并固定不能使用同一个快捷键。"
+            return
+        }
+
+        historyShortcut = shortcut
+        saveShortcut(shortcut, forKey: DefaultsKey.historyShortcut)
+        hotKeyRegistrationMessage = nil
+    }
+
+    func setScreenshotShortcut(_ shortcut: AppShortcut) {
+        guard shortcut != historyShortcut else {
+            hotKeyRegistrationMessage = "打开历史记录和截图并固定不能使用同一个快捷键。"
+            return
+        }
+
+        screenshotShortcut = shortcut
+        saveShortcut(shortcut, forKey: DefaultsKey.screenshotShortcut)
+        hotKeyRegistrationMessage = nil
+    }
+
+    func resetHistoryShortcut() {
+        setHistoryShortcut(.defaultHistory)
+    }
+
+    func resetScreenshotShortcut() {
+        setScreenshotShortcut(.defaultScreenshot)
+    }
+
+    func setHotKeyRegistrationMessage(_ message: String?) {
+        hotKeyRegistrationMessage = message
+    }
+
     func trustDevice(_ device: SharedDevice) {
         guard !trustedDeviceIDs.contains(device.id) else { return }
         trustedDeviceIDs.append(device.id)
@@ -315,6 +364,24 @@ final class AppState: ObservableObject {
     private func saveTrustedDeviceIDs() {
         trustedDeviceIDs.sort()
         userDefaults.set(trustedDeviceIDs, forKey: DefaultsKey.lanTrustedDeviceIDs)
+    }
+
+    private func saveShortcut(_ shortcut: AppShortcut, forKey key: String) {
+        guard let data = try? JSONEncoder().encode(shortcut) else { return }
+        userDefaults.set(data, forKey: key)
+    }
+
+    private static func shortcut(
+        forKey key: String,
+        defaultValue: AppShortcut,
+        userDefaults: UserDefaults
+    ) -> AppShortcut {
+        guard let data = userDefaults.data(forKey: key),
+              let shortcut = try? JSONDecoder().decode(AppShortcut.self, from: data) else {
+            return defaultValue
+        }
+
+        return shortcut
     }
 
     private func configureLANSharingCallbacks() {

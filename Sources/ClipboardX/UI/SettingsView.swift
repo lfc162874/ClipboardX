@@ -1,3 +1,5 @@
+import AppKit
+import Carbon
 import SwiftUI
 
 struct SettingsView: View {
@@ -5,6 +7,7 @@ struct SettingsView: View {
     @State private var newSensitivePattern = ""
     @State private var newIgnoredSourceApp = ""
     @State private var selectedSection: SettingsSection = .general
+    @State private var recordingShortcut: ShortcutTarget?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -106,8 +109,41 @@ struct SettingsView: View {
 
             SettingsGroup(title: "快捷键") {
                 VStack(spacing: 10) {
-                    ShortcutRow(title: "打开历史记录", shortcut: "Option + V", systemImage: "clock.arrow.circlepath")
-                    ShortcutRow(title: "截图并固定", shortcut: "Option + Shift + A", systemImage: "camera.viewfinder")
+                    EditableShortcutRow(
+                        title: "打开历史记录",
+                        shortcut: appState.historyShortcut,
+                        systemImage: "clock.arrow.circlepath",
+                        isRecording: recordingShortcut == .history,
+                        startAction: { recordingShortcut = .history },
+                        resetAction: { appState.resetHistoryShortcut() },
+                        captureAction: { shortcut in
+                            appState.setHistoryShortcut(shortcut)
+                            recordingShortcut = nil
+                        },
+                        cancelAction: { recordingShortcut = nil }
+                    )
+
+                    EditableShortcutRow(
+                        title: "截图并固定",
+                        shortcut: appState.screenshotShortcut,
+                        systemImage: "camera.viewfinder",
+                        isRecording: recordingShortcut == .screenshot,
+                        startAction: { recordingShortcut = .screenshot },
+                        resetAction: { appState.resetScreenshotShortcut() },
+                        captureAction: { shortcut in
+                            appState.setScreenshotShortcut(shortcut)
+                            recordingShortcut = nil
+                        },
+                        cancelAction: { recordingShortcut = nil }
+                    )
+
+                    if let message = appState.hotKeyRegistrationMessage {
+                        SettingsInlineStatusRow(
+                            message: message,
+                            systemImage: "exclamationmark.triangle.fill",
+                            color: SettingsPalette.orange
+                        )
+                    }
                 }
             }
         }
@@ -222,6 +258,11 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
             return "hand.raised.fill"
         }
     }
+}
+
+private enum ShortcutTarget: Equatable {
+    case history
+    case screenshot
 }
 
 private struct SettingsNavigationButton: View {
@@ -381,10 +422,15 @@ private struct SettingsInfoRow<Action: View>: View {
     }
 }
 
-private struct ShortcutRow: View {
+private struct EditableShortcutRow: View {
     let title: String
-    let shortcut: String
+    let shortcut: AppShortcut
     let systemImage: String
+    let isRecording: Bool
+    let startAction: () -> Void
+    let resetAction: () -> Void
+    let captureAction: (AppShortcut) -> Void
+    let cancelAction: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -396,15 +442,44 @@ private struct ShortcutRow: View {
 
             Spacer()
 
-            Text(shortcut)
-                .font(.callout.monospaced())
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(SettingsPalette.inputBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(SettingsPalette.border, lineWidth: 1)
+            ZStack {
+                Button(action: startAction) {
+                    Text(isRecording ? "按下组合键" : shortcut.displayString)
+                        .font(.callout.monospaced())
+                        .foregroundStyle(isRecording ? SettingsPalette.accent : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(minWidth: 152)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(SettingsPalette.inputBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(
+                                    isRecording ? SettingsPalette.accent.opacity(0.7) : SettingsPalette.border,
+                                    lineWidth: 1
+                                )
+                        }
                 }
+                .buttonStyle(.plain)
+
+                ShortcutRecorderView(
+                    isRecording: isRecording,
+                    onCapture: captureAction,
+                    onCancel: cancelAction
+                )
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityHidden(true)
+            }
+
+            Button(action: resetAction) {
+                Image(systemName: "arrow.counterclockwise")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("重置快捷键")
+            .help("重置快捷键")
         }
         .padding(12)
         .background(SettingsPalette.panelBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -412,6 +487,91 @@ private struct ShortcutRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(SettingsPalette.border, lineWidth: 1)
         }
+    }
+}
+
+private struct SettingsInlineStatusRow: View {
+    let message: String
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+
+            Text(message)
+                .font(.caption)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(color.opacity(0.24), lineWidth: 1)
+        }
+    }
+}
+
+private struct ShortcutRecorderView: NSViewRepresentable {
+    let isRecording: Bool
+    let onCapture: (AppShortcut) -> Void
+    let onCancel: () -> Void
+
+    func makeNSView(context: Context) -> ShortcutRecorderNSView {
+        let view = ShortcutRecorderNSView()
+        view.onCapture = onCapture
+        view.onCancel = onCancel
+        return view
+    }
+
+    func updateNSView(_ nsView: ShortcutRecorderNSView, context: Context) {
+        nsView.onCapture = onCapture
+        nsView.onCancel = onCancel
+        nsView.isRecording = isRecording
+
+        guard isRecording else {
+            if nsView.window?.firstResponder === nsView {
+                nsView.window?.makeFirstResponder(nil)
+            }
+            return
+        }
+
+        DispatchQueue.main.async {
+            nsView.window?.makeFirstResponder(nsView)
+        }
+    }
+}
+
+private final class ShortcutRecorderNSView: NSView {
+    var onCapture: ((AppShortcut) -> Void)?
+    var onCancel: (() -> Void)?
+    var isRecording = false
+
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard isRecording else {
+            super.keyDown(with: event)
+            return
+        }
+
+        if event.keyCode == UInt16(kVK_Escape) {
+            onCancel?()
+            return
+        }
+
+        guard let shortcut = AppShortcut(event: event) else {
+            NSSound.beep()
+            return
+        }
+
+        onCapture?(shortcut)
     }
 }
 

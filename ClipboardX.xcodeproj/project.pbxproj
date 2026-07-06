@@ -11,6 +11,7 @@
 		7A0000010000000000000002 /* ClipboardXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000010000000000000102 /* ClipboardXApp.swift */; };
 		7A0000010000000000000003 /* HotKeyController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000010000000000000103 /* HotKeyController.swift */; };
 		7A0000010000000000000004 /* PasteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000010000000000000104 /* PasteController.swift */; };
+		7A0000010000000000000017 /* AppShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000001000000000000011B /* AppShortcut.swift */; };
 		7A0000010000000000000005 /* ClipboardContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000010000000000000105 /* ClipboardContent.swift */; };
 		7A0000010000000000000006 /* ClipboardContentClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000010000000000000106 /* ClipboardContentClassifier.swift */; };
 		7A0000010000000000000007 /* ClipboardMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000010000000000000107 /* ClipboardMonitor.swift */; };
@@ -36,6 +37,7 @@
 		7A0000010000000000000102 /* ClipboardXApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardXApp.swift; sourceTree = "<group>"; };
 		7A0000010000000000000103 /* HotKeyController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyController.swift; sourceTree = "<group>"; };
 		7A0000010000000000000104 /* PasteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteController.swift; sourceTree = "<group>"; };
+		7A000001000000000000011B /* AppShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShortcut.swift; sourceTree = "<group>"; };
 		7A0000010000000000000105 /* ClipboardContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContent.swift; sourceTree = "<group>"; };
 		7A0000010000000000000106 /* ClipboardContentClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContentClassifier.swift; sourceTree = "<group>"; };
 		7A0000010000000000000107 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardMonitor.swift; sourceTree = "<group>"; };
@@ -131,6 +133,7 @@
 				7A0000010000000000000102 /* ClipboardXApp.swift */,
 				7A0000010000000000000103 /* HotKeyController.swift */,
 				7A0000010000000000000104 /* PasteController.swift */,
+				7A000001000000000000011B /* AppShortcut.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -256,6 +259,7 @@
 				7A0000010000000000000002 /* ClipboardXApp.swift in Sources */,
 				7A0000010000000000000003 /* HotKeyController.swift in Sources */,
 				7A0000010000000000000004 /* PasteController.swift in Sources */,
+				7A0000010000000000000017 /* AppShortcut.swift in Sources */,
 				7A0000010000000000000005 /* ClipboardContent.swift in Sources */,
 				7A0000010000000000000006 /* ClipboardContentClassifier.swift in Sources */,
 				7A0000010000000000000007 /* ClipboardMonitor.swift in Sources */,

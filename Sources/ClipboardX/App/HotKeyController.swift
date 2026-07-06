@@ -4,9 +4,9 @@ import Foundation
 final class HotKeyController {
     private let hotKeySignature = OSType(0x434C5058) // CLPX
     private let hotKeyIDValue: UInt32
-    private let keyCode: UInt32
-    private let modifiers: UInt32
-    private let description: String
+    private var keyCode: UInt32
+    private var modifiers: UInt32
+    private var description: String
     private let onRegistrationFailure: ((String) -> Void)?
     private let onTrigger: () -> Void
 
@@ -66,7 +66,7 @@ final class HotKeyController {
 
                 guard eventHotKeyID.signature == controller.hotKeySignature,
                       eventHotKeyID.id == controller.hotKeyIDValue else {
-                    return noErr
+                    return OSStatus(eventNotHandledErr)
                 }
 
                 controller.onTrigger()
@@ -111,6 +111,13 @@ final class HotKeyController {
             RemoveEventHandler(eventHandlerRef)
             self.eventHandlerRef = nil
         }
+    }
+
+    func update(shortcut: AppShortcut, description: String) {
+        keyCode = shortcut.keyCode
+        modifiers = shortcut.modifiers
+        self.description = description
+        register()
     }
 
     private func failureMessage(status: OSStatus, phase: String) -> String {
